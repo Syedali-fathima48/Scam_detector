@@ -4,6 +4,18 @@
   🔐 Cybersecurity Safety Assistant — Single-file Flask App
   🤖 Powered by Google Gemini AI (google-genai SDK)
 ============================================================
+
+SETUP (run these once):
+    pip install flask google-genai
+
+SET YOUR API KEY:
+    Windows CMD:   set GOOGLE_API_KEY=AIza...your_key
+    Mac / Linux:   export GOOGLE_API_KEY=AIza...your_key
+    OR just paste your key on line 30 below.
+
+RUN:
+    python app.py
+    Then open → http://localhost:5000
 """
 
 from flask import Flask, request, jsonify
@@ -14,7 +26,7 @@ import sys, os, time
 app = Flask(__name__)
 
 # ─── 🔑 PASTE YOUR KEY HERE (or use env var) ──────────────
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")  # 👈 e.g. "AIzaSy..."
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")  # 👈 e.g. "AIzaSy..."
 # ──────────────────────────────────────────────────────────
 
 # Models tried in order when one is overloaded (503 / 429)
@@ -181,34 +193,28 @@ HTML = r"""<!DOCTYPE html>
 </div>
 
 <script>
-  let selectedLang  = "english";   // key sent to backend
-  let customLangVal = "";           // holds the custom language name
+  let selectedLang  = "english";
+  let customLangVal = "";
 
-  // ── Attach click to ALL preset lang buttons ──
   document.querySelectorAll(".lang-btn:not(.custom-btn)").forEach(btn => {
     btn.addEventListener("click", () => selectLang(btn.dataset.lang, btn));
   });
 
   function selectLang(key, clickedBtn) {
-    // deactivate all preset buttons
     document.querySelectorAll(".lang-btn:not(.custom-btn)").forEach(b => b.classList.remove("active"));
     document.getElementById("custom-toggle-btn").classList.remove("active");
-    // hide custom tag
     document.getElementById("custom-active-tag").style.display = "none";
     document.getElementById("custom-row").style.display = "none";
     customLangVal = "";
-
     if (clickedBtn) clickedBtn.classList.add("active");
     selectedLang = key;
   }
 
-  // ── Custom language toggle ──
   function toggleCustomInput() {
     const row = document.getElementById("custom-row");
     const isOpen = row.style.display !== "none";
     if (isOpen) {
       row.style.display = "none";
-      // if nothing was set, revert to English
       if (!customLangVal) selectLang("english",
         document.querySelector('.lang-btn[data-lang="english"]'));
     } else {
@@ -221,20 +227,13 @@ HTML = r"""<!DOCTYPE html>
     const input = document.getElementById("custom-lang-input");
     const val   = input.value.trim();
     if (!val) { input.focus(); return; }
-
     customLangVal = val;
     selectedLang  = "custom";
-
-    // deactivate all preset buttons, activate custom toggle
     document.querySelectorAll(".lang-btn:not(.custom-btn)").forEach(b => b.classList.remove("active"));
     document.getElementById("custom-toggle-btn").classList.add("active");
-
-    // show the active tag
     const tag = document.getElementById("custom-active-tag");
     tag.style.display = "inline-flex";
     tag.innerHTML = `<span class="custom-tag">${escHtml(val)} <span class="remove" title="Remove" onclick="removeCustomLang()">✕</span></span>`;
-
-    // hide input row
     document.getElementById("custom-row").style.display = "none";
     input.value = "";
   }
@@ -243,19 +242,16 @@ HTML = r"""<!DOCTYPE html>
     customLangVal = "";
     document.getElementById("custom-active-tag").style.display = "none";
     document.getElementById("custom-toggle-btn").classList.remove("active");
-    // revert to English
     const engBtn = document.querySelector('.lang-btn[data-lang="english"]');
     engBtn.classList.add("active");
     selectedLang = "english";
   }
 
-  // allow pressing Enter inside custom input
   document.getElementById("custom-lang-input").addEventListener("keydown", e => {
     if (e.key === "Enter") setCustomLanguage();
     if (e.key === "Escape") toggleCustomInput();
   });
 
-  // ── Analyze ──
   async function runAnalysis() {
     const text  = document.getElementById("input-text").value.trim();
     const btn   = document.getElementById("analyze-btn");
@@ -267,7 +263,6 @@ HTML = r"""<!DOCTYPE html>
 
     if (!text) { showError("⚠️  Please enter something to analyze."); return; }
 
-    // resolve final language string
     const langToSend  = selectedLang === "custom" ? "custom" : selectedLang;
     const customValue = selectedLang === "custom" ? customLangVal : "";
 
@@ -357,7 +352,7 @@ HTML = r"""<!DOCTYPE html>
 
 @app.route("/")
 def index():
-    return HTML   # serve the HTML directly — no external file needed
+    return HTML
 
 
 @app.route("/analyze", methods=["POST"])
@@ -370,7 +365,6 @@ def analyze():
     language_key    = data.get("language", "english").strip().lower()
     custom_language = data.get("custom_language", "").strip()
 
-    # Resolve final language name
     if language_key == "custom":
         language = custom_language if custom_language else "English"
     else:
@@ -421,7 +415,10 @@ Input to analyze: {user_text}"""
                 response = client.models.generate_content(
                     model=model,
                     contents=prompt,
-                    config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=1024),
+                    config=types.GenerateContentConfig(
+                        temperature=0.1,
+                        max_output_tokens=2048,   # ✅ fixed — was 1024, now 2048
+                    ),
                 )
                 result = response.text
                 return jsonify({"result": result.strip() if result else "No response received."})
@@ -435,25 +432,15 @@ Input to analyze: {user_text}"""
 
                 if is_overloaded:
                     if attempt < len(RETRY_DELAYS) - 1:
-                        time.sleep(delay)   # wait then retry same model
+                        time.sleep(delay)
                         continue
                     else:
-                        break               # all retries exhausted → try next model
+                        break
                 else:
-                    # Non-recoverable error (bad key, invalid input, etc.) — fail immediately
                     return jsonify({"error": f"Gemini error: {type(e).__name__} — {e}"})
 
-    # All models and retries exhausted
     print(f"[ERROR] All models failed. Last error: {last_error}", file=sys.stderr)
     return jsonify({"error": "Gemini is currently overloaded across all models. Please wait a moment and try again."})
-
-
-if __name__ == "__main__":
-    print("=" * 55)
-    print("  🔐 CyberShield — Cybersecurity Safety Assistant")
-    print("  🌐 Open in browser → http://localhost:5000")
-    print("=" * 55)
-    app.run(debug=True, port=5000)
 
 
 @app.route("/models")
@@ -471,3 +458,12 @@ def list_models():
         return jsonify({"models": available, "preferred": GEMINI_MODELS})
     except Exception as e:
         return jsonify({"error": str(e)})
+
+
+if __name__ == "__main__":
+    print("=" * 55)
+    print("  🔐 CyberShield — Cybersecurity Safety Assistant")
+    print("  🌐 Open in browser → http://localhost:5000")
+    print("  🔍 Check models   → http://localhost:5000/models")
+    print("=" * 55)
+    app.run(debug=True, port=5000)
