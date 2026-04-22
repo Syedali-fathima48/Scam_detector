@@ -4,18 +4,6 @@
   🔐 Cybersecurity Safety Assistant — Single-file Flask App
   🤖 Powered by Google Gemini AI (google-genai SDK)
 ============================================================
-
-SETUP (run these once):
-    pip install flask google-genai
-
-SET YOUR API KEY:
-    Windows CMD:   set GOOGLE_API_KEY=AIza...your_key
-    Mac / Linux:   export GOOGLE_API_KEY=AIza...your_key
-    OR just paste your key on line 30 below.
-
-RUN:
-    python app.py
-    Then open → http://localhost:5000
 """
 
 from flask import Flask, request, jsonify
